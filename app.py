@@ -123,44 +123,73 @@ st.markdown('<div class="header-box"><h1 class="header-title">Totti\'s WINNER La
 t1, t2, t3 = st.tabs(["🎯 期待値スキャン", "🧠 結果学習", "📊 リーグ戦力表"])
 
 with t1:
-    txt = st.text_area("対戦データをコピペ（順不同OK）", height=150)
+    txt = st.text_area("Jリーグ公式サイトの今週の日程・結果ページのコピペ、または「新潟 浦和」でOK", height=150)
     if st.button("期待値をスキャン！"):
-        if not txt: 
+        if not txt:
             st.warning("データを入力してください")
-        elif df.empty: 
+        elif df.empty:
             st.error("teams.csvを読み込めません")
         else:
-            # --- 修正ポイント：正規表現で「VS」を挟んだペアを確実に抜く ---
-            # 「チームA VS チームB」の形を探す（全角・半角・大文字小文字対応）
-            pattern = r'([^\s\n\d]+)\s*(?:VS|ＶＳ|vs)\s*([^\s\n\d]+)'
-            raw_matches = re.findall(pattern, txt)
+            # 1. 記号の正規化（全角VS、スペース、タブ等を整理）
+            processed_txt = txt.replace('　', ' ').replace('ＶＳ', ' ').replace('vs', ' ').replace('VS', ' ').replace('\t', ' ')
+            lines = processed_txt.split('\n')
             
-            # ノイズ（チケット、詳細など）を除去
-            noise_words = ["詳細", "見どころ", "チケット", "観る", "試合", "DAZN"]
             clean_matches = []
-            for m in raw_matches:
-                home, away = m[0].strip(), m[1].strip()
-                # 両方のチーム名がCSVに存在し、かつノイズでない場合のみ採用
-                if home in df["チーム名"].values and away in df["チーム名"].values:
-                    if not any(word in home or word in away for word in noise_words):
-                        clean_matches.append((home, away))
-            
-            # 重複（同じカードが何度も出る）を削除
+            team_list = df["チーム名"].tolist()
+            # チーム名の長い順にソート（「横浜FM」を「横浜」で誤判定しないため）
+            sorted_teams = sorted(team_list, key=len, reverse=True)
+
+            for line in lines:
+                if not line.strip(): continue
+                
+                hits = []
+                # 2. その行に含まれるチーム名とその出現位置を記録
+                for t_name in sorted_teams:
+                    if t_name in line:
+                        # 同じチーム名が1行に複数あっても対応できるようfindall的に探す
+                        start_pos = 0
+                        while True:
+                            pos = line.find(t_name, start_pos)
+                            if pos == -1: break
+                            hits.append((pos, t_name))
+                            start_pos = pos + len(t_name)
+                
+                # 3. 出現位置順に並べて、重複（長い名前に含まれる短い名前）を排除
+                hits.sort()
+                final_hit_names = []
+                last_end = -1
+                for pos, name in hits:
+                    if pos >= last_end: # 前のチーム名と被ってなければ採用
+                        final_hit_names.append(name)
+                        last_end = pos + len(name)
+                
+                # 4. 1行に2つ以上あればペアにする
+                # 「神戸vs広島の試合詳細」→ [神戸, 広島] → (神戸, 広島)
+                # 「新潟 浦和」→ [新潟, 浦和] → (新潟, 浦和)
+                if len(final_hit_names) >= 2:
+                    # 最初の2つをHome, Awayとする
+                    h_team, a_team = final_hit_names[0], final_hit_names[1]
+                    if h_team != a_team:
+                        clean_matches.append((h_team, a_team))
+
+            # 全体の重複カードを削除
             clean_matches = list(dict.fromkeys(clean_matches))
 
             if not clean_matches:
-                st.error("有効な対戦カードが見つかりませんでした。CSVの表記を確認してください。")
+                st.error("対戦カードが判別できません。チーム名が2つ入っているか確認してください。")
             else:
+                st.success(f"🎯 {len(clean_matches)}試合を検出！")
                 for h, a in clean_matches:
                     th = df[df["チーム名"]==h].iloc[0]
                     ta = df[df["チーム名"]==a].iloc[0]
                     res = predict_score(th["攻撃力"], th["守備力"], ta["攻撃力"], ta["守備力"])
                     
-                    with st.expander(f"🏟️ {h} vs {a} 予測結果", expanded=True):
+                    with st.expander(f"🏟️ {h} vs {a}", expanded=True):
                         c = st.columns(3)
                         for idx, r in enumerate(res[:3]):
                             c[idx].metric(f"予想 {idx+1}", r["score"], f"{r['prob']:.1%}")
 
+                            
 with t2:
     st.markdown("### 🧠 試合結果から戦力調整")
     st_res = st.text_area("結果入力 (例: 新潟 2 - 1 浦和)", height=150)
