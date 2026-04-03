@@ -65,22 +65,19 @@ def load_data():
     except: return pd.DataFrame()
 
 def predict_score(h_data, a_data):
-    # パラメータ抽出
     h_at, h_df, h_mgr, h_pf = h_data["攻撃力"], h_data["守備力"], h_data["監督力"], h_data["完成度"]
     a_at, a_df, a_mgr, a_pf = a_data["攻撃力"], a_data["守備力"], a_data["監督力"], a_data["完成度"]
 
-    # 1. 基本平均得点
-    base_mu_h = (h_at * 1.05) / (a_df * 0.95 + 1)
-    base_mu_a = (a_at * 1.05) / (h_df * 0.95 + 1)
+    # 1. 基本平均得点（ここを 0.10 前後に戻して安定させます）
+    base_mu_h = (h_at * 1.0) / (a_df * 1.0 + 1)
+    base_mu_a = (a_at * 1.0) / (h_df * 1.0 + 1)
 
-    # 2. 監督力と完成度による攻撃ブースト（足し算ではなく倍率でマイルドに）
-    # (監督+完成度)が38(満点に近い)なら 約1.19倍
+    # 2. 監督力と完成度による攻撃倍率 (最大1.1倍〜1.2倍程度)
     h_multiplier = 1.0 + (h_mgr + h_pf) * 0.005
     a_multiplier = 1.0 + (a_mgr + a_pf) * 0.005
 
-    # 3. 最終的な期待値 (μ)
-    mu_h = base_mu_h * h_multiplier + 0.2
-    mu_a = base_mu_a * a_multiplier + 0.2
+    mu_h = base_mu_h * h_multiplier + 0.3
+    mu_a = base_mu_a * a_multiplier + 0.3
 
     probs = []
     for h in range(4):
@@ -88,9 +85,9 @@ def predict_score(h_data, a_data):
             p = poisson.pmf(h, mu_h) * poisson.pmf(a, mu_a)
             probs.append({"score": f"{h}-{a}", "prob": p})
 
-    # その他勝率の計算（ポアソン補正 0.8）
-    p_h_other = sum(poisson.pmf(h, mu_h) * poisson.pmf(a, mu_a) for h in range(4, 10) for a in range(h)) * 0.8
-    p_a_other = sum(poisson.pmf(h, mu_h) * poisson.pmf(a, mu_a) for h in range(a, 10) for h in range(a)) * 0.8
+    # --- 修正ポイント：変数名を i, j に変更してループの干渉を防ぐ ---
+    p_h_other = sum(poisson.pmf(i, mu_h) * poisson.pmf(j, mu_a) for i in range(4, 10) for j in range(i)) * 0.8
+    p_a_other = sum(poisson.pmf(j, mu_a) * poisson.pmf(i, mu_h) for j in range(4, 10) for i in range(j)) * 0.8
     
     probs.append({"score": "その他(H勝)", "prob": p_h_other})
     probs.append({"score": "その他(A勝)", "prob": p_a_other})
