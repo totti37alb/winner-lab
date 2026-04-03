@@ -55,7 +55,7 @@ TEAM_COLORS = {
 }
 LIGHT_BG = ["#FFF100", "#FFFF33", "#FFFFFF"]
 
-# --- 3. ロジック (アグレッシブ・WINNER特化モデル) ---
+# --- 3. ロジック (アグレッシブ・WINNER特化モデル：微調整版) ---
 @st.cache_data
 def load_data():
     try:
@@ -69,21 +69,20 @@ def predict_score(h_data, a_data):
     h_at, h_df, h_mgr, h_pf = h_data["攻撃力"], h_data["守備力"], h_data["監督力"], h_data["完成度"]
     a_at, a_df, a_mgr, a_pf = a_data["攻撃力"], a_data["守備力"], a_data["監督力"], a_data["完成度"]
 
-    # 1. 基本平均得点の算出 (攻撃力を1.1倍重く評価)
-    base_mu_h = (h_at * 1.1) / (a_df * 0.9 + 1)
-    base_mu_a = (a_at * 1.1) / (h_df * 0.9 + 1)
+    # 1. 基本平均得点
+    base_mu_h = (h_at * 1.05) / (a_df * 0.95 + 1)
+    base_mu_a = (a_at * 1.05) / (h_df * 0.95 + 1)
 
-    # 2. 【NEW】監督力と完成度による攻撃ブースト
-    # 組織力が高いチームほど、得点パターンが多いと解釈
+    # 2. 監督力と完成度による攻撃ブースト（足し算ではなく倍率でマイルドに）
+    # (監督+完成度)が38(満点に近い)なら 約1.19倍
     h_multiplier = 1.0 + (h_mgr + h_pf) * 0.005
     a_multiplier = 1.0 + (a_mgr + a_pf) * 0.005
 
-    # 3. 最終的な期待値（掛け算で微調整）
-    mu_h = base_mu_h + atk_boost_h + 0.2
-    mu_a = base_mu_a + atk_boost_a + 0.2
+    # 3. 最終的な期待値 (μ)
+    mu_h = base_mu_h * h_multiplier + 0.2
+    mu_a = base_mu_a * a_multiplier + 0.2
 
     probs = []
-    # 0-0 〜 3-3 の全16パターンを計算
     for h in range(4):
         for a in range(4):
             p = poisson.pmf(h, mu_h) * poisson.pmf(a, mu_a)
@@ -91,7 +90,7 @@ def predict_score(h_data, a_data):
 
     # その他勝率の計算（ポアソン補正 0.8）
     p_h_other = sum(poisson.pmf(h, mu_h) * poisson.pmf(a, mu_a) for h in range(4, 10) for a in range(h)) * 0.8
-    p_a_other = sum(poisson.pmf(h, mu_h) * poisson.pmf(a, mu_a) for a in range(a, 10) for h in range(a)) * 0.8
+    p_a_other = sum(poisson.pmf(h, mu_h) * poisson.pmf(a, mu_a) for h in range(a, 10) for h in range(a)) * 0.8
     
     probs.append({"score": "その他(H勝)", "prob": p_h_other})
     probs.append({"score": "その他(A勝)", "prob": p_a_other})
@@ -149,7 +148,6 @@ with t1:
                 for h, a in clean_matches:
                     th = df[df["チーム名"]==h].iloc[0]
                     ta = df[df["チーム名"]==a].iloc[0]
-                    # 改良版ロジックへデータごと渡す
                     res = predict_score(th, ta)
                     
                     with st.expander(f"🏟️ {h} vs {a}", expanded=True):
