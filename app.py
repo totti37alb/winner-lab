@@ -75,12 +75,12 @@ def predict_score(h_data, a_data):
 
     # 2. 【NEW】監督力と完成度による攻撃ブースト
     # 組織力が高いチームほど、得点パターンが多いと解釈
-    atk_boost_h = (h_mgr + h_pf) * 0.04
-    atk_boost_a = (a_mgr + a_pf) * 0.04
+    h_multiplier = 1.0 + (h_mgr + h_pf) * 0.005
+    a_multiplier = 1.0 + (a_mgr + a_pf) * 0.005
 
-    # 3. 最終的な期待値 (ベースライン +0.3 で無得点抑制)
-    mu_h = base_mu_h + atk_boost_h + 0.3
-    mu_a = base_mu_a + atk_boost_a + 0.3
+    # 3. 最終的な期待値（掛け算で微調整）
+    mu_h = base_mu_h + atk_boost_h + 0.2
+    mu_a = base_mu_a + atk_boost_a + 0.2
 
     probs = []
     # 0-0 〜 3-3 の全16パターンを計算
