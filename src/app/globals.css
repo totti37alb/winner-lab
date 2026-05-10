@@ -1,22 +1,28 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-body {
-  background-color: #050505 !important;
-  color: #ffffff !important;
-  margin: 0;
-  font-family: sans-serif;
+* {
+  box-sizing: border-box;
 }
 
-/* スクロールバーもスタイリッシュに */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background-color: #000000;
+  color: #ffffff;
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 4px;
 }
 ::-webkit-scrollbar-track {
-  background: #050505;
+  background: #000;
 }
 ::-webkit-scrollbar-thumb {
   background: #333;
   border-radius: 10px;
+}
+
+input[type="range"] {
+  accent-color: #ff6700;
 }
