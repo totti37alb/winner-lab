@@ -206,6 +206,18 @@ function parseResults(text: string, teams: Team[]): MatchResult[] {
   return results;
 }
 
+function calcWDL(probs: ScoreProb[]): { home: number; draw: number; away: number } {
+  let home = 0, draw = 0, away = 0;
+  for (const { score, prob } of probs) {
+    if (!score.includes("-")) continue;
+    const [h, a] = score.split("-").map(Number);
+    if (h > a) home += prob;
+    else if (h === a) draw += prob;
+    else away += prob;
+  }
+  return { home, draw, away };
+}
+
 // ─── Team Colors ──────────────────────────────────────────────────────────────
 
 const TEAM_COLORS: Record<string, [string, string]> = {
@@ -514,6 +526,8 @@ function ScanTab({
   onScan: () => void;
   teamsLoaded: boolean;
 }) {
+  const [totoMode, setTotoMode] = useState(false);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
       <textarea
@@ -556,26 +570,51 @@ function ScanTab({
 
       {scanResults.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          <p
-            style={{
-              color: "#FF6700",
-              fontWeight: 700,
-              fontSize: "0.875rem",
-              margin: 0,
-            }}
-          >
+          {/* Mode toggle */}
+          <div style={{ display: "flex", gap: "6px" }}>
+            {[
+              { id: false, label: "📊 スコア予想" },
+              { id: true,  label: "🎰 totoモード" },
+            ].map(({ id, label }) => (
+              <button
+                key={String(id)}
+                onClick={() => setTotoMode(id)}
+                style={{
+                  flex: 1,
+                  height: "36px",
+                  borderRadius: "10px",
+                  fontWeight: 700,
+                  fontSize: "0.8rem",
+                  border: "none",
+                  cursor: "pointer",
+                  backgroundColor: totoMode === id ? "#FF6700" : "#1a1a1a",
+                  color: totoMode === id ? "#fff" : "#666",
+                  outline: totoMode === id ? "none" : "1px solid #333",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <p style={{ color: "#FF6700", fontWeight: 700, fontSize: "0.875rem", margin: 0 }}>
             🎯 {scanResults.length}試合を検出！
           </p>
-          {scanResults.map(({ h, a, probs }) => (
-            <MatchCard
-              key={`${h}|${a}`}
-              h={h}
-              a={a}
-              honsen={probs[0]}
-              osaeru={probs[1]}
-              anakuji={pickAnakuji(probs)}
-            />
-          ))}
+
+          {scanResults.map(({ h, a, probs }) =>
+            totoMode ? (
+              <TotoCard key={`${h}|${a}`} h={h} a={a} probs={probs} />
+            ) : (
+              <MatchCard
+                key={`${h}|${a}`}
+                h={h}
+                a={a}
+                honsen={probs[0]}
+                osaeru={probs[1]}
+                anakuji={pickAnakuji(probs)}
+              />
+            )
+          )}
         </div>
       )}
     </div>
@@ -659,6 +698,123 @@ function MatchCard({
             </span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function TotoCard({ h, a, probs }: { h: string; a: string; probs: ScoreProb[] }) {
+  const { home, draw, away } = calcWDL(probs);
+  const items = [
+    { label: "①", name: h,       prob: home, key: "home" },
+    { label: "△", name: "引き分け", prob: draw, key: "draw" },
+    { label: "②", name: a,       prob: away, key: "away" },
+  ];
+  const topKey = items.reduce((best, cur) => cur.prob > best.prob ? cur : best).key;
+  const topItem = items.find((i) => i.key === topKey)!;
+
+  return (
+    <div
+      style={{
+        borderRadius: "12px",
+        border: "1px solid #333",
+        backgroundColor: "#0a0a0a",
+        overflow: "hidden",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          backgroundColor: "#111",
+          padding: "8px 14px",
+          borderBottom: "1px solid #333",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <p style={{ color: "#fff", fontWeight: 900, fontSize: "0.875rem", margin: 0 }}>
+          🏟️ {h} vs {a}
+        </p>
+        <span
+          style={{
+            backgroundColor: "#FF6700",
+            color: "#fff",
+            fontWeight: 900,
+            fontSize: "0.75rem",
+            padding: "2px 8px",
+            borderRadius: "6px",
+          }}
+        >
+          推奨 {topItem.label}
+        </span>
+      </div>
+
+      {/* Bars */}
+      <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: "10px" }}>
+        {items.map(({ label, name, prob, key }) => {
+          const isTop = key === topKey;
+          return (
+            <div key={key} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span
+                style={{
+                  color: isTop ? "#FF6700" : "#555",
+                  fontWeight: 900,
+                  fontSize: "0.9rem",
+                  width: "18px",
+                  textAlign: "center",
+                  flexShrink: 0,
+                }}
+              >
+                {label}
+              </span>
+              <span
+                style={{
+                  color: isTop ? "#fff" : "#555",
+                  fontSize: "0.75rem",
+                  width: "64px",
+                  flexShrink: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  fontWeight: isTop ? 700 : 400,
+                }}
+              >
+                {name}
+              </span>
+              <div
+                style={{
+                  flex: 1,
+                  height: "8px",
+                  backgroundColor: "#1e1e1e",
+                  borderRadius: "4px",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${prob * 100}%`,
+                    height: "100%",
+                    backgroundColor: isTop ? "#FF6700" : "#3a3a3a",
+                    borderRadius: "4px",
+                  }}
+                />
+              </div>
+              <span
+                style={{
+                  color: isTop ? "#FF6700" : "#555",
+                  fontWeight: isTop ? 900 : 400,
+                  fontSize: "0.75rem",
+                  width: "38px",
+                  textAlign: "right",
+                  flexShrink: 0,
+                }}
+              >
+                {(prob * 100).toFixed(1)}%
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
